@@ -210,13 +210,16 @@ function start(browser) {
     // data by tab id
     var tabActivated = {},
         tabMessages = {},
-        tabURLs = {};
+        tabURLs = {},
+        tabDwellTimers = {},
+        tabDwellStart = {};
 
     var newTabUrl = browser._setNewTabUrl();
 
     var conf = {
         llm: { },
         focusAfterClosed: "right",
+        tabDwellTime: 0,
         tabsMRUOrder: true,
         newTabPosition: 'default',
         showTabIndices: false,
@@ -292,6 +295,7 @@ function start(browser) {
     loadSettings(null, browser._applyProxySettings);
 
     function removeTab(tabId) {
+        clearTabDwell(tabId);
         delete tabActivated[tabId];
         delete tabMessages[tabId];
         delete tabURLs[tabId];
@@ -329,6 +333,33 @@ function start(browser) {
         }
     }
     var _lastActiveTabId = null;
+    function clearTabDwell(tabId) {
+        if (tabDwellTimers.hasOwnProperty(tabId)) {
+            clearTimeout(tabDwellTimers[tabId]);
+            delete tabDwellTimers[tabId];
+        }
+        delete tabDwellStart[tabId];
+    }
+    function scheduleTabDwell(tabId) {
+        clearTabDwell(tabId);
+        var dwellTime = parseInt(conf.tabDwellTime, 10);
+        if (!isFinite(dwellTime) || dwellTime <= 0) {
+            tabActivated[tabId] = new Date().getTime();
+            return;
+        }
+        var start = new Date().getTime();
+        tabDwellStart[tabId] = start;
+        tabDwellTimers[tabId] = setTimeout(function() {
+            if (tabDwellStart[tabId] !== start) {
+                return;
+            }
+            if (_lastActiveTabId !== tabId) {
+                return;
+            }
+            tabActivated[tabId] = start;
+            clearTabDwell(tabId);
+        }, dwellTime);
+    }
     function _tabActivated(tabId) {
         if (_lastActiveTabId !== tabId) {
             if (_lastActiveTabId !== null) {
@@ -356,8 +387,18 @@ function start(browser) {
         }
     });
     chrome.windows.onFocusChanged.addListener(function(w) {
+        if (w === chrome.windows.WINDOW_ID_NONE) {
+            if (_lastActiveTabId !== null) {
+                clearTabDwell(_lastActiveTabId);
+            }
+            return;
+        }
         getActiveTab(function(tab) {
+            if (_lastActiveTabId !== null && _lastActiveTabId !== tab.id) {
+                clearTabDwell(_lastActiveTabId);
+            }
             _tabActivated(tab.id);
+            scheduleTabDwell(tab.id);
         });
     });
 
@@ -378,8 +419,11 @@ function start(browser) {
             tabHistory.push(activeInfo.tabId);
             tabHistoryIndex = tabHistory.length - 1;
         }
-        tabActivated[activeInfo.tabId] = new Date().getTime();
+        if (_lastActiveTabId !== null && _lastActiveTabId !== activeInfo.tabId) {
+            clearTabDwell(_lastActiveTabId);
+        }
         _tabActivated(activeInfo.tabId);
+        scheduleTabDwell(activeInfo.tabId);
         historyTabAction = false;
         chromelikeNewTabPosition = 0;
 
@@ -748,14 +792,15 @@ function start(browser) {
         chrome.tabs.query(queryInfo, function(tabs) {
             tabs = _filterByTitleOrUrl(tabs, message.filter);
             if (tabs.length > message.tabsThreshold && conf.tabsMRUOrder) {
+                var useDwellTime = parseInt(conf.tabDwellTime, 10) > 0;
                 // only remove current tab when tabsMRUOrder is enabled.
                 tabs = tabs.filter(function(b) {
                     return b.id !== tab.id;
                 });
                 tabs.sort(function(x, y) {
                     // Shift tabs without "last access" data to the end
-                    var a = x.lastAccessed || tabActivated[x.id];
-                    var b = y.lastAccessed || tabActivated[y.id];
+                    var a = useDwellTime ? tabActivated[x.id] : (x.lastAccessed || tabActivated[x.id]);
+                    var b = useDwellTime ? tabActivated[y.id] : (y.lastAccessed || tabActivated[y.id]);
 
                     if (!isFinite(a) && !isFinite(b)) {
                         return 0;
