@@ -786,6 +786,42 @@ function start(browser) {
             }
         });
     };
+    function _getTabMRUTime(tab, useDwellTime) {
+        if (useDwellTime) {
+            return tabActivated[tab.id];
+        }
+        return tab.lastAccessed || tabActivated[tab.id];
+    }
+    function _sortTabsByMRU(tabs, options) {
+        var currentTabId = options && options.currentTabId;
+        var useDwellTime = options && options.useDwellTime;
+        var removeCurrent = options && options.removeCurrent;
+        if (removeCurrent && currentTabId !== undefined) {
+            tabs = tabs.filter(function(t) {
+                return t.id !== currentTabId;
+            });
+        }
+        tabs.sort(function(x, y) {
+            // Shift tabs without "last access" data to the end
+            var a = _getTabMRUTime(x, useDwellTime);
+            var b = _getTabMRUTime(y, useDwellTime);
+
+            if (!isFinite(a) && !isFinite(b)) {
+                return 0;
+            }
+
+            if (!isFinite(a)) {
+                return 1;
+            }
+
+            if (!isFinite(b)) {
+                return -1;
+            }
+
+            return b - a;
+        });
+        return tabs;
+    }
     self.getTabs = function(message, sender, sendResponse) {
         var tab = sender.tab;
         var queryInfo = message.queryInfo || {};
@@ -794,27 +830,10 @@ function start(browser) {
             if (tabs.length > message.tabsThreshold && conf.tabsMRUOrder) {
                 var useDwellTime = parseInt(conf.tabDwellTime, 10) > 0;
                 // only remove current tab when tabsMRUOrder is enabled.
-                tabs = tabs.filter(function(b) {
-                    return b.id !== tab.id;
-                });
-                tabs.sort(function(x, y) {
-                    // Shift tabs without "last access" data to the end
-                    var a = useDwellTime ? tabActivated[x.id] : (x.lastAccessed || tabActivated[x.id]);
-                    var b = useDwellTime ? tabActivated[y.id] : (y.lastAccessed || tabActivated[y.id]);
-
-                    if (!isFinite(a) && !isFinite(b)) {
-                        return 0;
-                    }
-
-                    if (!isFinite(a)) {
-                        return 1;
-                    }
-
-                    if (!isFinite(b)) {
-                        return -1;
-                    }
-
-                    return b - a;
+                tabs = _sortTabsByMRU(tabs, {
+                    currentTabId: tab.id,
+                    useDwellTime,
+                    removeCurrent: true
                 });
             }
             _response(message, sendResponse, {
@@ -910,6 +929,30 @@ function start(browser) {
         });
     };
     self.goToLastTab = function(message, sender, sendResponse) {
+        var useDwellTime = parseInt(conf.tabDwellTime, 10) > 0;
+        if (useDwellTime) {
+            var currentTabId = sender.tab && sender.tab.id;
+            chrome.tabs.query({}, function(tabs) {
+                tabs = _sortTabsByMRU(tabs, {
+                    currentTabId,
+                    useDwellTime: true,
+                    removeCurrent: true
+                });
+                if (tabs.length > 0 && isFinite(_getTabMRUTime(tabs[0], true))) {
+                    chrome.tabs.update(tabs[0].id, {
+                        active: true
+                    });
+                    return;
+                }
+                if (tabHistory.length > 1) {
+                    var lastTab = tabHistory[tabHistory.length - 2];
+                    chrome.tabs.update(lastTab, {
+                        active: true
+                    });
+                }
+            });
+            return;
+        }
         if (tabHistory.length > 1) {
             var lastTab = tabHistory[tabHistory.length - 2];
             chrome.tabs.update(lastTab, {
