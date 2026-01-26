@@ -340,9 +340,16 @@ function start(browser) {
         }
         delete tabDwellStart[tabId];
     }
+    function getTabDwellTimeValue() {
+        return parseInt(conf.tabDwellTime, 10);
+    }
+    function isDwellTimeEnabled() {
+        var dwellTime = getTabDwellTimeValue();
+        return isFinite(dwellTime) && dwellTime > 0;
+    }
     function scheduleTabDwell(tabId) {
         clearTabDwell(tabId);
-        var dwellTime = parseInt(conf.tabDwellTime, 10);
+        var dwellTime = getTabDwellTimeValue();
         if (!isFinite(dwellTime) || dwellTime <= 0) {
             tabActivated[tabId] = new Date().getTime();
             return;
@@ -829,13 +836,43 @@ function start(browser) {
         });
         return tabs;
     }
+    function activateLastHistoryTab() {
+        if (tabHistory.length > 1) {
+            var lastTab = tabHistory[tabHistory.length - 2];
+            chrome.tabs.update(lastTab, {
+                active: true
+            });
+            return true;
+        }
+        return false;
+    }
+    function activateMostRecentTab(currentTabId, useDwellTime) {
+        if (!useDwellTime) {
+            return activateLastHistoryTab();
+        }
+        chrome.tabs.query({}, function(tabs) {
+            tabs = _sortTabsByMRU(tabs, {
+                currentTabId,
+                useDwellTime: true,
+                removeCurrent: true
+            });
+            if (tabs.length > 0 && isFinite(_getTabMRUTime(tabs[0], true))) {
+                chrome.tabs.update(tabs[0].id, {
+                    active: true
+                });
+                return;
+            }
+            activateLastHistoryTab();
+        });
+        return true;
+    }
     self.getTabs = function(message, sender, sendResponse) {
         var tab = sender.tab;
         var queryInfo = message.queryInfo || {};
         chrome.tabs.query(queryInfo, function(tabs) {
             tabs = _filterByTitleOrUrl(tabs, message.filter);
             if (tabs.length > message.tabsThreshold && conf.tabsMRUOrder) {
-                var useDwellTime = parseInt(conf.tabDwellTime, 10) > 0;
+                var useDwellTime = isDwellTimeEnabled();
                 // only remove current tab when tabsMRUOrder is enabled.
                 tabs = _sortTabsByMRU(tabs, {
                     currentTabId: tab.id,
@@ -936,36 +973,9 @@ function start(browser) {
         });
     };
     self.goToLastTab = function(message, sender, sendResponse) {
-        var useDwellTime = parseInt(conf.tabDwellTime, 10) > 0;
-        if (useDwellTime) {
-            var currentTabId = sender.tab && sender.tab.id;
-            chrome.tabs.query({}, function(tabs) {
-                tabs = _sortTabsByMRU(tabs, {
-                    currentTabId,
-                    useDwellTime: true,
-                    removeCurrent: true
-                });
-                if (tabs.length > 0 && isFinite(_getTabMRUTime(tabs[0], true))) {
-                    chrome.tabs.update(tabs[0].id, {
-                        active: true
-                    });
-                    return;
-                }
-                if (tabHistory.length > 1) {
-                    var lastTab = tabHistory[tabHistory.length - 2];
-                    chrome.tabs.update(lastTab, {
-                        active: true
-                    });
-                }
-            });
-            return;
-        }
-        if (tabHistory.length > 1) {
-            var lastTab = tabHistory[tabHistory.length - 2];
-            chrome.tabs.update(lastTab, {
-                active: true
-            });
-        }
+        var useDwellTime = isDwellTimeEnabled();
+        var currentTabId = sender.tab && sender.tab.id;
+        activateMostRecentTab(currentTabId, useDwellTime);
     };
     self.historyTab = function(message, sender, sendResponse) {
         if (tabHistory.length > 0) {
