@@ -5,6 +5,42 @@ function dispatchSKEvent(type, args, target) {
     target.dispatchEvent(new CustomEvent(`surfingkeys:${type}`, { 'detail': args }));
 }
 
+function isExtensionContextInvalidated(err) {
+    const message = err && (err.message || String(err));
+    return message && message.indexOf("Extension context invalidated") !== -1;
+}
+
+function swallowExtensionInvalidated(promise) {
+    if (promise && typeof promise.catch === "function") {
+        promise.catch((err) => {
+            if (isExtensionContextInvalidated(err)) {
+                return;
+            }
+            if (err) {
+                console.warn(err);
+            }
+        });
+    }
+}
+
+function installExtensionContextGuards() {
+    if (window.__skExtensionContextGuardsInstalled) {
+        return;
+    }
+    window.__skExtensionContextGuardsInstalled = true;
+    window.addEventListener("unhandledrejection", (event) => {
+        if (isExtensionContextInvalidated(event.reason)) {
+            event.preventDefault();
+        }
+    });
+    window.addEventListener("error", (event) => {
+        if (isExtensionContextInvalidated(event.error || event.message)) {
+            event.preventDefault();
+        }
+    });
+}
+installExtensionContextGuards();
+
 /**
  * Call background `action` with `args`, the `callback` will be executed with response from background.
  *
@@ -29,11 +65,15 @@ function RUNTIME(action, args, callback) {
     }
     try {
         args.needResponse = callback !== undefined;
-        chrome.runtime.sendMessage(args, callback);
+        const result = chrome.runtime.sendMessage(args, callback);
+        swallowExtensionInvalidated(result);
         if (action === 'read') {
             runtime.on('onTtsEvent', callback);
         }
     } catch (e) {
+        if (isExtensionContextInvalidated(e)) {
+            return;
+        }
         dispatchSKEvent("front", ['showPopup', '[runtime exception] ' + e]);
     }
 }

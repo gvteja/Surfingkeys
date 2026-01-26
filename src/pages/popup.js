@@ -10,10 +10,35 @@ String.prototype.format = function() {
 var disableAll = document.getElementById('disableAll'),
     version = "Surfingkeys " + chrome.runtime.getManifest().version;
 
+function isExtensionContextInvalidated(err) {
+    const message = err && (err.message || String(err));
+    return message && message.indexOf("Extension context invalidated") !== -1;
+}
+
+function swallowExtensionInvalidated(promise) {
+    if (promise && typeof promise.catch === "function") {
+        promise.catch((err) => {
+            if (isExtensionContextInvalidated(err)) {
+                return;
+            }
+            if (err) {
+                console.warn(err);
+            }
+        });
+    }
+}
+
 function RUNTIME(action, args, callback) {
     (args = args || {}).action = action;
     args.needResponse = callback !== undefined;
-    chrome.runtime.sendMessage(args, callback);
+    try {
+        const result = chrome.runtime.sendMessage(args, callback);
+        swallowExtensionInvalidated(result);
+    } catch (e) {
+        if (!isExtensionContextInvalidated(e)) {
+            throw e;
+        }
+    }
 }
 
 function updateStatus(blocklist) {

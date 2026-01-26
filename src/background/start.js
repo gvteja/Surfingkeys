@@ -41,6 +41,20 @@ function extendObject(target, ss) {
     }
 }
 
+function swallowExtensionInvalidated(promise) {
+    if (promise && typeof promise.catch === "function") {
+        promise.catch((err) => {
+            const message = err && (err.message || String(err));
+            if (message && message.indexOf("Extension context invalidated") !== -1) {
+                return;
+            }
+            if (err) {
+                console.warn(err);
+            }
+        });
+    }
+}
+
 function getSubSettings(set, keys) {
     var subset;
     if (!keys) {
@@ -201,6 +215,7 @@ function start(browser) {
     var self = {};
 
     const isMV3 = chrome.runtime.getManifest().manifest_version === 3;
+    const browserAction = isMV3 ? chrome.action : chrome.browserAction;
 
     var tabHistory = [],
         tabHistoryIndex = 0,
@@ -441,18 +456,20 @@ function start(browser) {
             tabs.length > 0 && cb(tabs[0]);
         });
     }
-    chrome.commands.onCommand.addListener(function(command) {
+    function handleCommand(command) {
         switch (command) {
             case 'restartext':
+                swallowExtensionInvalidated(browserAction.setBadgeText({ text: command }));
                 chrome.tabs.query({}, function(tabs) {
                     tabs.forEach(function(tab) {
-                        chrome.tabs.reload(tab.id);
+                        swallowExtensionInvalidated(chrome.tabs.reload(tab.id));
                     });
                     chrome.runtime.reload();
                 });
                 break;
             case 'previousTab':
             case 'nextTab':
+                swallowExtensionInvalidated(browserAction.setBadgeText({ text: command }));
                 getActiveTab(function(tab) {
                     var index = (command === 'previousTab') ? tab.index - 1 : tab.index + 1;
                     chrome.tabs.query({ windowId: tab.windowId }, function(tabs) {
@@ -462,6 +479,7 @@ function start(browser) {
                 });
                 break;
             case 'closeTab':
+                swallowExtensionInvalidated(browserAction.setBadgeText({ text: command }));
                 getActiveTab(function(tab) {
                     chrome.tabs.remove(tab.id);
                 });
@@ -473,15 +491,26 @@ function start(browser) {
                         host: host,
                         operation: "toggle"
                     }, function() {
-                        chrome.tabs.reload(tab.id, {
+                        swallowExtensionInvalidated(chrome.tabs.reload(tab.id, {
                             bypassCache: true
-                        });
+                        }));
                     });
                 });
                 break;
             default:
+                swallowExtensionInvalidated(browserAction.setBadgeText({ text: "Default" }));
                 break;
         }
+    }
+    chrome.commands.onCommand.addListener(function(command) {
+        chrome.storage.local.set({
+            lastCommand: {
+                command,
+                ts: Date.now()
+            }
+        });
+        console.log('[commands] fired:', command);
+        handleCommand(command);
     });
 
     self.pendingPorts = [];
@@ -516,10 +545,10 @@ function start(browser) {
             handleMessage(m, s, r);
         });
         chrome.runtime.onInstalled.addListener((e) => {
-            chrome.userScripts.configureWorld({
+            swallowExtensionInvalidated(chrome.userScripts.configureWorld({
                 csp: 'script-src \'self\' \'unsafe-eval\'',
                 messaging: true
-            });
+            }));
         });
     }
 
@@ -1043,9 +1072,9 @@ function start(browser) {
     self.reloadTab = function(message, sender, sendResponse) {
         _roundRepeatTabs(sender.tab, message.repeats, function(tabIds) {
             tabIds.forEach(function(tabId) {
-                chrome.tabs.reload(tabId, {
+                swallowExtensionInvalidated(chrome.tabs.reload(tabId, {
                     bypassCache: message.nocache
-                });
+                }));
             });
         });
     };
@@ -1327,12 +1356,12 @@ function start(browser) {
                 chrome.userScripts.getScripts({ids:[userScriptId]}, (r) => {
                     const code = `import('./api.js').then((module) => {module.default("${chrome.runtime.getURL("/")}", (api, settings) => {${snippets}\n})});`;
                     const registerSettingSnippets = () => {
-                        chrome.userScripts.register([{
+                        swallowExtensionInvalidated(chrome.userScripts.register([{
                             allFrames: true,
                             id: userScriptId,
                             matches: ['*://*/*', 'file:///*'],
                             js: [{code}]
-                        }]);
+                        }]));
                     };
                     if (r.length > 0) {
                         if (r[0].js[0].code !== code) {
@@ -1345,7 +1374,7 @@ function start(browser) {
             } else {
                 chrome.userScripts.getScripts({ids:[userScriptId]}, (r) => {
                     if (r.length > 0) {
-                        chrome.userScripts.unregister({ids:[userScriptId]});
+                        swallowExtensionInvalidated(chrome.userScripts.unregister({ids:[userScriptId]}));
                     }
                 });
             }
@@ -1417,10 +1446,10 @@ function start(browser) {
         } else {
             if (message.settings.showAdvanced && isMV3) {
                 if (isUserScriptsAvailable()) {
-                    chrome.userScripts.configureWorld({
+                    swallowExtensionInvalidated(chrome.userScripts.configureWorld({
                         csp: 'script-src \'self\' \'unsafe-eval\'',
                         messaging: true
-                    });
+                    }));
                     _updateAndPostSettings(message.settings);
                 } else {
                     error = "Advanced mode is only available when Developer mode is turned on from chrome://extensions/.";
@@ -1469,7 +1498,6 @@ function start(browser) {
         } else if (message.status === "lurking") {
             icon = "icons/48-l.png";
         }
-        const browserAction = isMV3 ? chrome.action : chrome.browserAction;
         browserAction.setIcon({
             path: icon,
             tabId: (sender.tab ? sender.tab.id : undefined)
@@ -1956,7 +1984,7 @@ function start(browser) {
     }
 
     self.writeClipboard = function (message, sender, sendResponse) {
-        navigator.clipboard.writeText(message.text)
+        swallowExtensionInvalidated(navigator.clipboard.writeText(message.text));
     };
     self.readClipboard = function (message, sender, sendResponse) {
         // only for Safari
@@ -1974,7 +2002,7 @@ function start(browser) {
     let clientInLLMRequest = {tabId: 0, frameId: 0};
     const sendLLMessage = (tabId, frameId, message) => {
         if (browser.name === "Safari") {
-            chrome.runtime.sendMessage(message);
+            swallowExtensionInvalidated(chrome.runtime.sendMessage(message));
         } else {
             sendTabMessage(tabId, frameId, message);
         }
@@ -2023,7 +2051,8 @@ function start(browser) {
     };
 
     self.getContainerName = browser._getContainerName(self, _response);
-    chrome.runtime.setUninstallURL("http://brookhong.github.io/2018/01/30/why-did-you-uninstall-surfingkeys.html");
+    swallowExtensionInvalidated(chrome.runtime.setUninstallURL("http://brookhong.github.io/2018/01/30/why-did-you-uninstall-surfingkeys.html"));
+
 
     self.connectNative = function (message, sender, sendResponse) {
         if (browser.nvimServer && browser.nvimServer.instance) {
@@ -2041,6 +2070,8 @@ function start(browser) {
             });
         }
     };
+
+    console.log("[background] started and start finished!");
 }
 
 export {
