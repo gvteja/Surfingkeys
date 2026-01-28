@@ -176,10 +176,22 @@ function startNative() {
 }
 nvimServer.instance = startNative();
 
-// CLI handlers - populated by start() with access to internal functions
+// CLI native messaging server
+//
+// Commands like "chooseTab" send a message to the content script, which handles the UI.
+// Commands like "lastTab" need to call functions in start.js that have access to internal
+// tab management state (tabHistory, tabActivated, dwell time config).
+//
+// We cannot use chrome.runtime.sendMessage here because messages sent from the service
+// worker do NOT trigger chrome.runtime.onMessage listeners in the same service worker.
+// This is by design - sendMessage is for cross-context communication (background ↔ content
+// scripts), not self-messaging. Attempting it results in "The message port closed before
+// a response was received" error.
+//
+// Instead, we use cliHandlers as a bridge: this object is passed to start(), which
+// populates it with functions that have access to its internal scope.
 const cliHandlers = {};
 
-// CLI native messaging server
 function startCliServer() {
     const cliHost = chrome.runtime.connectNative("com.vijayt.surfingkeys");
     cliHost.onMessage.addListener((msg) => {
@@ -193,10 +205,10 @@ function startCliServer() {
             if (cliHandlers.goToLastTab) {
                 cliHandlers.goToLastTab();
             } else {
-                console.log("[CLI] goToLastTab handler not registered");
+                console.warn("[CLI] goToLastTab handler not registered");
             }
         } else {
-            console.log("[CLI] Unrecognized command:", msg);
+            console.warn("[CLI] Unrecognized command:", msg);
         }
     });
     cliHost.onDisconnect.addListener(() => {

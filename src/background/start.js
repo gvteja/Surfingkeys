@@ -866,6 +866,17 @@ function start(browser) {
         });
         return true;
     }
+    // Core implementation for going to last tab - used by both message handler and CLI
+    function _goToLastTab(currentTabId) {
+        var useDwellTime = isDwellTimeEnabled();
+        if (currentTabId !== undefined) {
+            activateMostRecentTab(currentTabId, useDwellTime);
+        } else {
+            getActiveTab(function(tab) {
+                activateMostRecentTab(tab ? tab.id : undefined, useDwellTime);
+            });
+        }
+    }
     self.getTabs = function(message, sender, sendResponse) {
         var tab = sender.tab;
         var queryInfo = message.queryInfo || {};
@@ -973,9 +984,7 @@ function start(browser) {
         });
     };
     self.goToLastTab = function(message, sender, sendResponse) {
-        var useDwellTime = isDwellTimeEnabled();
-        var currentTabId = message.currentTabId || (sender.tab && sender.tab.id);
-        activateMostRecentTab(currentTabId, useDwellTime);
+        _goToLastTab(sender.tab && sender.tab.id);
     };
     self.historyTab = function(message, sender, sendResponse) {
         if (tabHistory.length > 0) {
@@ -2059,14 +2068,9 @@ function start(browser) {
         }
     };
 
-    // Register CLI handlers if provided
+    // Register CLI handlers - see chrome.js for why this bridge pattern is needed
     if (browser.cliHandlers) {
-        browser.cliHandlers.goToLastTab = function() {
-            var useDwellTime = isDwellTimeEnabled();
-            getActiveTab(function(tab) {
-                activateMostRecentTab(tab ? tab.id : undefined, useDwellTime);
-            });
-        };
+        browser.cliHandlers.goToLastTab = _goToLastTab;
     }
 }
 
