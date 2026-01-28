@@ -1,5 +1,6 @@
 {
     "manifest_version": 2,
+    "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoqwZAoigzXEIQobQK+e0CeaobM62mfkBA17qqL93TKFQqMT+7k4bd4gv6uUOpOdjo5+7l4d7ElOcn7r7gq7A7TSK4xSnsYW0wRnG1hV6XSrlWRrBRLTq2m8pcztHUReH8RfObZeMPmuVgcSMWKDOVNUa5FMWxHurkSnMIAa+kM/9sMkg8HG2r4ld2MX+bvSj6CJZF5TWdIi6mEgaNmE4/OnbiCN4S+lXqklEbcsp+DZCWJIVcBobT3nxcktIELjvcRBohYkDpTklcPCK4fy5Wtn1Rws5S70RIqhOTsXLY4HNEBTL5QNHGMyWhcGtSy3pQBEoprxKMeUDBvtl/OVtGwIDAQAB",
     "name": "Surfingkeys",
     "short_name": "Surfingkeys",
     "description": "Rich shortcuts to click links/switch tabs/scroll, capture pages, use your browser like vim for productivity.",

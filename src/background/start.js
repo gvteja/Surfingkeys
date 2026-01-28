@@ -974,7 +974,7 @@ function start(browser) {
     };
     self.goToLastTab = function(message, sender, sendResponse) {
         var useDwellTime = isDwellTimeEnabled();
-        var currentTabId = sender.tab && sender.tab.id;
+        var currentTabId = message.currentTabId || (sender.tab && sender.tab.id);
         activateMostRecentTab(currentTabId, useDwellTime);
     };
     self.historyTab = function(message, sender, sendResponse) {
@@ -2058,6 +2058,16 @@ function start(browser) {
             });
         }
     };
+
+    // Register CLI handlers if provided
+    if (browser.cliHandlers) {
+        browser.cliHandlers.goToLastTab = function() {
+            var useDwellTime = isDwellTimeEnabled();
+            getActiveTab(function(tab) {
+                activateMostRecentTab(tab ? tab.id : undefined, useDwellTime);
+            });
+        };
+    }
 }
 
 export {

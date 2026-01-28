@@ -176,12 +176,42 @@ function startNative() {
 }
 nvimServer.instance = startNative();
 
+// CLI handlers - populated by start() with access to internal functions
+const cliHandlers = {};
+
+// CLI native messaging server
+function startCliServer() {
+    const cliHost = chrome.runtime.connectNative("com.vijayt.surfingkeys");
+    cliHost.onMessage.addListener((msg) => {
+        if (msg.command === "chooseTab") {
+            chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+                if (tabs[0]) {
+                    chrome.tabs.sendMessage(tabs[0].id, {subject: 'chooseTab'});
+                }
+            });
+        } else if (msg.command === "lastTab") {
+            if (cliHandlers.goToLastTab) {
+                cliHandlers.goToLastTab();
+            } else {
+                console.log("[CLI] goToLastTab handler not registered");
+            }
+        } else {
+            console.log("[CLI] Unrecognized command:", msg);
+        }
+    });
+    cliHost.onDisconnect.addListener(() => {
+        setTimeout(startCliServer, 5000);
+    });
+}
+startCliServer();
+
 start({
     name: "Chrome",
     detectTabTitleChange: true,
     getLatestHistoryItem,
     loadRawSettings,
     nvimServer,
+    cliHandlers,
     _applyProxySettings,
     _setNewTabUrl,
     _getContainerName
