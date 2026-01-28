@@ -233,6 +233,12 @@ function startCliServer() {
             } else {
                 console.warn("[CLI] goToLastTab handler not registered");
             }
+        } else if (msg.command === "restartExt" || msg.command === "restart" || msg.command === "restartext") {
+            if (cliHandlers.restartExtensionAndTabs) {
+                cliHandlers.restartExtensionAndTabs();
+            } else {
+                console.warn("[CLI] restartExtensionAndTabs handler not registered");
+            }
         } else {
             console.warn("[CLI] Unrecognized command:", msg);
         }

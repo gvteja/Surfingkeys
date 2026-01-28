@@ -67,6 +67,13 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.send_header('Content-Type', 'text/plain')
             self.end_headers()
             self.wfile.write(b'OK')
+        elif self.path in ('/restart', '/restartExt', '/restartext'):
+            with lock:
+                send_message({'command': 'restartExt'})
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'OK')
         else:
             self.send_response(404)
             self.end_headers()

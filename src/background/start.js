@@ -323,6 +323,13 @@ function start(browser) {
             delete tabMessages[tabId];
         }
     }
+    function setTabAutoDiscardable(tabId, autoDiscardable) {
+        try {
+            chrome.tabs.update(tabId, { autoDiscardable }, () => {});
+        } catch (e) {
+            // Ignore invalid properties in non-Chromium browsers.
+        }
+    }
 
     function sendTabMessage(tabId, frameId, message) {
         const opts = (frameId === -1) ? undefined : {frameId: frameId};
@@ -478,15 +485,18 @@ function start(browser) {
             });
         });
     }
+    function restartExtensionAndTabs() {
+        chrome.tabs.query({}, function(tabs) {
+            tabs.forEach(function(tab) {
+                chrome.tabs.reload(tab.id);
+            });
+            chrome.runtime.reload();
+        });
+    }
     chrome.commands.onCommand.addListener(function(command) {
         switch (command) {
             case 'restartext':
-                chrome.tabs.query({}, function(tabs) {
-                    tabs.forEach(function(tab) {
-                        chrome.tabs.reload(tab.id);
-                    });
-                    chrome.runtime.reload();
-                });
+                restartExtensionAndTabs();
                 break;
             case 'previousTab':
             case 'nextTab':
@@ -1717,6 +1727,7 @@ function start(browser) {
     self.tabURLAccessed = function(message, sender, sendResponse) {
         if (sender.tab) {
             var tabId = sender.tab.id;
+            setTabAutoDiscardable(tabId, false);
             _setScrollPos_bg(tabId);
             if (!tabURLs.hasOwnProperty(tabId)) {
                 tabURLs[tabId] = {};
@@ -2101,6 +2112,7 @@ function start(browser) {
     // Register CLI handlers - see chrome.js for why this bridge pattern is needed
     if (browser.cliHandlers) {
         browser.cliHandlers.goToLastTab = _goToLastTab;
+        browser.cliHandlers.restartExtensionAndTabs = restartExtensionAndTabs;
     }
 }
 
