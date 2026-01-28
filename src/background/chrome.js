@@ -192,14 +192,40 @@ nvimServer.instance = startNative();
 // populates it with functions that have access to its internal scope.
 const cliHandlers = {};
 
+function getLastFocusedActiveTab(cb) {
+    const fallback = () => {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs[0]) {
+                cb(tabs[0]);
+            }
+        });
+    };
+    chrome.windows.getLastFocused({ populate: true }, (win) => {
+        if (chrome.runtime.lastError || !win) {
+            fallback();
+            return;
+        }
+        const activeTab = win.tabs && win.tabs.find((t) => t.active);
+        if (activeTab) {
+            cb(activeTab);
+            return;
+        }
+        chrome.tabs.query({ active: true, windowId: win.id }, (tabs) => {
+            if (tabs[0]) {
+                cb(tabs[0]);
+            } else {
+                fallback();
+            }
+        });
+    });
+}
+
 function startCliServer() {
     const cliHost = chrome.runtime.connectNative("com.vijayt.surfingkeys");
     cliHost.onMessage.addListener((msg) => {
         if (msg.command === "chooseTab") {
-            chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
-                if (tabs[0]) {
-                    chrome.tabs.sendMessage(tabs[0].id, {subject: 'chooseTab'});
-                }
+            getLastFocusedActiveTab((tab) => {
+                chrome.tabs.sendMessage(tab.id, {subject: 'chooseTab'});
             });
         } else if (msg.command === "lastTab") {
             if (cliHandlers.goToLastTab) {

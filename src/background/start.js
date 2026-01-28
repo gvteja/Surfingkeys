@@ -406,7 +406,7 @@ function start(browser) {
             }
             _tabActivated(tab.id);
             scheduleTabDwell(tab.id);
-        });
+        }, w);
     });
 
     chrome.tabs.onCreated.addListener(function(tab) {
@@ -443,9 +443,39 @@ function start(browser) {
         _updateTabIndices();
     });
 
-    function getActiveTab(cb) {
-        chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-            tabs.length > 0 && cb(tabs[0]);
+    function getActiveTab(cb, windowId) {
+        const fallback = () => {
+            chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+                tabs.length > 0 && cb(tabs[0]);
+            });
+        };
+        if (windowId !== undefined && windowId !== chrome.windows.WINDOW_ID_NONE) {
+            chrome.tabs.query({ active: true, windowId }, function(tabs) {
+                if (tabs.length > 0) {
+                    cb(tabs[0]);
+                } else {
+                    fallback();
+                }
+            });
+            return;
+        }
+        chrome.windows.getLastFocused({ populate: true }, function(win) {
+            if (chrome.runtime.lastError || !win) {
+                fallback();
+                return;
+            }
+            const activeTab = win.tabs && win.tabs.find((t) => t.active);
+            if (activeTab) {
+                cb(activeTab);
+                return;
+            }
+            chrome.tabs.query({ active: true, windowId: win.id }, function(tabs) {
+                if (tabs.length > 0) {
+                    cb(tabs[0]);
+                } else {
+                    fallback();
+                }
+            });
         });
     }
     chrome.commands.onCommand.addListener(function(command) {
