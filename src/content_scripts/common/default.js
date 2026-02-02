@@ -363,7 +363,7 @@ export default function(api, clipboard, insert, normal, hints, visual, front, br
     mapkey('gf', '#1Open a link in non-active new tab', function() {
         hints.create("", hints.dispatchMouseClick, {tabbed: true, active: false});
     });
-    mapkey('cf', '#1Open multiple links in a new tab', function() {
+    mapkey('F', '#1Open multiple links in a new tab', function() {
         hints.create("", hints.dispatchMouseClick, {multipleHits: true});
     });
     map('C', 'gf');
@@ -447,7 +447,7 @@ export default function(api, clipboard, insert, normal, hints, visual, front, br
     mapkey('B', '#4Go one tab history back', function() {
         RUNTIME("historyTab", {backward: true});
     }, {repeatIgnore: true});
-    mapkey('F', '#4Go one tab history forward', function() {
+    mapkey('FF', '#4Go one tab history forward', function() {
         RUNTIME("historyTab", {backward: false});
     }, {repeatIgnore: true});
     mapkey('<Ctrl-6>', '#4Go to last used tab', function() {
@@ -544,10 +544,10 @@ export default function(api, clipboard, insert, normal, hints, visual, front, br
             });
         });
     });
-    mapkey('yt', '#3Duplicate current tab', function() {
+    mapkey('yd', '#3Duplicate current tab', function() {
         RUNTIME("duplicateTab");
     });
-    mapkey('yT', '#3Duplicate current tab in background', function() {
+    mapkey('yD', '#3Duplicate current tab in background', function() {
         RUNTIME("duplicateTab", {active: false});
     });
     mapkey('yy', "#7Copy current page's URL", function() {
@@ -889,7 +889,7 @@ export default function(api, clipboard, insert, normal, hints, visual, front, br
                 step: 1
             });
         });
-        mapkey('yd', "#7Copy current downloading URL", function() {
+        mapkey('yt', "#7Copy current downloading URL", function() {
             RUNTIME('getDownloads', {
                 query: {state: "in_progress"}
             }, function(response) {
