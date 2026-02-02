@@ -884,16 +884,16 @@ function createNormal(insert) {
         code: bindScrollForHints("bottom")
     });
     self.mappings.add("j", {
-        annotation: "Scroll down",
+        annotation: "Scroll half page down",
         feature_group: 2,
         repeatIgnore: true,
-        code: bindScrollForHints("down")
+        code: self.scroll.bind(self, "pageDown")
     });
     self.mappings.add("k", {
-        annotation: "Scroll up",
+        annotation: "Scroll half page up",
         feature_group: 2,
         repeatIgnore: true,
-        code: bindScrollForHints("up")
+        code: self.scroll.bind(self, "pageUp")
     });
     self.mappings.add("h", {
         annotation: "Scroll left",
