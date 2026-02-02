@@ -60,8 +60,8 @@ export default function(api, clipboard, insert, normal, hints, visual, front, br
         mapkey(';s', 'Toggle PDF viewer from SurfingKeys', function() {
             var pdfUrl = window.location.href;
             if (pdfUrl.indexOf(chrome.runtime.getURL("/pages/pdf_viewer.html")) === 0) {
-                const filePos = window.location.search.indexOf("=") + 1;
-                pdfUrl = window.location.search.substr(filePos);
+                const params = new URLSearchParams(window.location.search);
+                pdfUrl = params.get("file");
                 RUNTIME('updateSettings', {
                     settings: {
                         "noPdfViewer": 1
