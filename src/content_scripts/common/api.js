@@ -424,8 +424,24 @@ function createAPI(clipboard, insert, normal, hints, visual, front, browser) {
         document.title = title == null ? "" : title.toString();
     }
 
+    /**
+     * Copy current tab's URL.
+     *
+     * @example
+     * copyCurrentTabUrl();
+     */
+    function copyCurrentTabUrl() {
+        var url = window.location.href;
+        if (url.indexOf(chrome.runtime.getURL("/pages/pdf_viewer.html")) === 0) {
+            const filePos = window.location.search.indexOf("=") + 1;
+            url = window.location.search.substr(filePos);
+        }
+        clipboard.write(url);
+    }
+
     initSKFunctionListener("api", {
         addSearchAlias,
+        copyCurrentTabUrl,
         imap,
         map,
         lmap,
@@ -488,6 +504,7 @@ function createAPI(clipboard, insert, normal, hints, visual, front, browser) {
         aceVimMap,
         addVimMapKey,
         addSearchAlias,
+        copyCurrentTabUrl,
         cmap,
         imap,
         imapkey,
