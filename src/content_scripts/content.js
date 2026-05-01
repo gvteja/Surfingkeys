@@ -259,6 +259,12 @@ function start(browser) {
             runtime.on('showBanner', function(msg, sender, response) {
                 showBanner(msg.message, 3000);
             });
+            runtime.on('renameDocumentTitle', function() {
+                modes.front.attach();
+                modes.front.showEditor("", function(data) {
+                    modes.api.renameDocumentTitle(data);
+                }, 'input', false, {startInsert: true});
+            });
             document.addEventListener("surfingkeys:ensureFrontEnd", function(evt) {
                 modes.front.attach();
             });

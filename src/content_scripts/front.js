@@ -267,7 +267,7 @@ function createFront(insert, normal, hints, visual, browser) {
      *     }, 'url');
      * });
      */
-    self.showEditor = function(element, onWrite, type, useNeovim) {
+    self.showEditor = function(element, onWrite, type, useNeovim, options) {
         var content,
             type = type || element.localName,
             initial_line = 0;
@@ -306,6 +306,9 @@ function createFront(insert, normal, hints, visual, browser) {
             initial_line: initial_line,
             content: content
         };
+        if (options) {
+            Object.assign(cmd, options);
+        }
         if (useNeovim || runtime.conf.useNeovim) {
             cmd.file_name = `${new URL(window.location.origin).host}/${elementBehindEditor.nodeName.toLowerCase()}`;
         }
