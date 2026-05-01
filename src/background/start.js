@@ -210,6 +210,7 @@ function start(browser) {
     // data by tab id
     var tabActivated = {},
         tabMessages = {},
+        tabTitleOverrides = {},
         tabURLs = {};
 
     var newTabUrl = browser._setNewTabUrl();
@@ -294,6 +295,7 @@ function start(browser) {
     function removeTab(tabId) {
         delete tabActivated[tabId];
         delete tabMessages[tabId];
+        delete tabTitleOverrides[tabId];
         delete tabURLs[tabId];
         tabHistory = tabHistory.filter(function(e) {
             return e !== tabId;
@@ -1636,10 +1638,16 @@ function start(browser) {
             tabURLs[tabId][message.url] = message.title;
             return {
                 active: sender.tab.active,
-                index: conf.showTabIndices ? sender.tab.index + 1 : 0
+                index: conf.showTabIndices ? sender.tab.index + 1 : 0,
+                titleOverride: tabTitleOverrides.hasOwnProperty(tabId) ? tabTitleOverrides[tabId] : null
             };
         } else {
             return {};
+        }
+    };
+    self.setTabTitleOverride = function(message, sender, sendResponse) {
+        if (sender.tab) {
+            tabTitleOverrides[sender.tab.id] = message.title == null ? "" : message.title.toString();
         }
     };
     self.getTabURLs = function(message, sender, sendResponse) {

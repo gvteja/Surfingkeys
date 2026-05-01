@@ -421,7 +421,12 @@ function createAPI(clipboard, insert, normal, hints, visual, front, browser) {
      * renameDocumentTitle('Work queue');
      */
     function renameDocumentTitle(title) {
-        document.title = title == null ? "" : title.toString();
+        title = title == null ? "" : title.toString();
+        document.title = title;
+        if (window === top) {
+            RUNTIME('setTabTitleOverride', { title });
+            dispatchSKEvent('documentTitleRenamed', { title });
+        }
     }
 
     /**
