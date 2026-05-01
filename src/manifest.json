@@ -25,6 +25,9 @@
         "chooseTab": {
             "description": "Choose a tab."
         },
+        "renameDocumentTitle": {
+            "description": "Rename the current tab title."
+        },
         "proxyThis": {
             "description": "Toggle current site in autoproxy_hosts."
         }

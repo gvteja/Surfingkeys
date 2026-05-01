@@ -559,7 +559,10 @@ const Front = (function() {
             normal.exit();
             RUNTIME('connectNative', {mode: "embed"}, (resp) => {
                 nvim.connect(resp.url, () => {
-                    nvim.command(`call NewScratch("${message.file_name}", "${encode(message.content)}", "${message.type}")`);
+                    const scratch = nvim.command(`call NewScratch("${message.file_name}", "${encode(message.content)}", "${message.type}")`);
+                    if (message.startInsert) {
+                        scratch.then(() => nvim.command('startinsert'));
+                    }
                 });
             });
         });
@@ -1299,6 +1302,9 @@ function createAceEditor(normal, front) {
                 // set cursor at initial line
                 _ace.state.cm.setCursor(message.initial_line, 0);
                 _ace.state.cm.ace.renderer.scrollCursorIntoView();
+                if (message.startInsert) {
+                    vim.handleKey(_ace.state.cm, 'i', 'mapping');
+                }
                 // reset undo
                 setTimeout( function () {
                     _ace.renderer.session.$undoManager.reset();

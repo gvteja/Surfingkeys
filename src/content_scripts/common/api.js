@@ -412,6 +412,18 @@ function createAPI(clipboard, insert, normal, hints, visual, front, browser) {
         });
     }
 
+    /**
+     * Rename current page's document title.
+     *
+     * @param {string} title the new title for current page.
+     *
+     * @example
+     * renameDocumentTitle('Work queue');
+     */
+    function renameDocumentTitle(title) {
+        document.title = title == null ? "" : title.toString();
+    }
+
     initSKFunctionListener("api", {
         addSearchAlias,
         imap,
@@ -423,6 +435,7 @@ function createAPI(clipboard, insert, normal, hints, visual, front, browser) {
         iunmap,
         vunmap,
         removeSearchAlias,
+        renameDocumentTitle,
         searchSelectedWith,
         "clipboard:write": clipboard.write,
         "clipboard:read": () => {
@@ -490,6 +503,7 @@ function createAPI(clipboard, insert, normal, hints, visual, front, browser) {
         mapkey,
         readText: browser.readText,
         removeSearchAlias,
+        renameDocumentTitle,
         searchSelectedWith,
         tabOpenLink,
         vmap,

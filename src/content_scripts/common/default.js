@@ -24,6 +24,7 @@ export default function(api, clipboard, insert, normal, hints, visual, front, br
         mapkey,
         imapkey,
         readText,
+        renameDocumentTitle,
         vmapkey,
         searchSelectedWith,
     } = api;
@@ -569,6 +570,11 @@ export default function(api, clipboard, insert, normal, hints, visual, front, br
     });
     mapkey('yl', "#7Copy current page's title", function() {
         clipboard.write(document.title);
+    });
+    mapkey(';dt', "#4Rename current page's title", function() {
+        front.showEditor("", function(data) {
+            renameDocumentTitle(data);
+        }, 'input', false, {startInsert: true});
     });
     mapkey('yQ', '#7Copy all query history of OmniQuery.', function() {
         RUNTIME('getSettings', {

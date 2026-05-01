@@ -186,6 +186,9 @@ const api = {
     removeSearchAlias: (alias, search_leader_key, only_this_site_key) => {
         dispatchSKEvent('api', ['removeSearchAlias', alias, search_leader_key, only_this_site_key]);
     },
+    renameDocumentTitle: (title) => {
+        dispatchSKEvent('api', ['renameDocumentTitle', title]);
+    },
     searchSelectedWith: (se, onlyThisSite, interactive, alias) => {
         dispatchSKEvent('api', ['searchSelectedWith', se, onlyThisSite, interactive, alias]);
     },

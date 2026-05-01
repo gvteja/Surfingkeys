@@ -263,6 +263,12 @@ function start(browser) {
                 modes.front.attach();
                 modes.front.chooseTab();
             });
+            runtime.on('renameDocumentTitle', function() {
+                modes.front.attach();
+                modes.front.showEditor("", function(data) {
+                    modes.api.renameDocumentTitle(data);
+                }, 'input', false, {startInsert: true});
+            });
             document.addEventListener("surfingkeys:ensureFrontEnd", function(evt) {
                 modes.front.attach();
             });

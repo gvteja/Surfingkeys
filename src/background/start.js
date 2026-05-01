@@ -515,6 +515,13 @@ function start(browser) {
                     });
                 });
                 break;
+            case 'renameDocumentTitle':
+                getActiveTab(function(tab) {
+                    sendTabMessage(tab.id, 0, {
+                        subject: 'renameDocumentTitle'
+                    });
+                });
+                break;
             case 'closeTab':
                 getActiveTab(function(tab) {
                     chrome.tabs.remove(tab.id);
