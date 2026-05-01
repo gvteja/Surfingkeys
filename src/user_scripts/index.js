@@ -186,6 +186,9 @@ const api = {
     removeSearchAlias: (alias, search_leader_key, only_this_site_key) => {
         dispatchSKEvent('api', ['removeSearchAlias', alias, search_leader_key, only_this_site_key]);
     },
+    copyCurrentTabUrl: () => {
+        dispatchSKEvent('api', ['copyCurrentTabUrl']);
+    },
     renameDocumentTitle: (title) => {
         dispatchSKEvent('api', ['renameDocumentTitle', title]);
     },

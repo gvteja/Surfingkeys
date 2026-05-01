@@ -263,6 +263,9 @@ function start(browser) {
                 modes.front.attach();
                 modes.front.chooseTab();
             });
+            runtime.on('copyCurrentTabUrl', function() {
+                modes.api.copyCurrentTabUrl();
+            });
             runtime.on('renameDocumentTitle', function() {
                 modes.front.attach();
                 modes.front.showEditor("", function(data) {

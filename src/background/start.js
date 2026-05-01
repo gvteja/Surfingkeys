@@ -515,6 +515,13 @@ function start(browser) {
                     });
                 });
                 break;
+            case 'copyCurrentTabUrl':
+                getActiveTab(function(tab) {
+                    sendTabMessage(tab.id, 0, {
+                        subject: 'copyCurrentTabUrl'
+                    });
+                });
+                break;
             case 'renameDocumentTitle':
                 getActiveTab(function(tab) {
                     sendTabMessage(tab.id, 0, {

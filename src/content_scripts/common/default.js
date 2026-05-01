@@ -19,6 +19,7 @@ import {
 export default function(api, clipboard, insert, normal, hints, visual, front, browser) {
     const {
         addSearchAlias,
+        copyCurrentTabUrl,
         cmap,
         map,
         mapkey,
@@ -551,14 +552,7 @@ export default function(api, clipboard, insert, normal, hints, visual, front, br
     mapkey('yD', '#3Duplicate current tab in background', function() {
         RUNTIME("duplicateTab", {active: false});
     });
-    mapkey('yy', "#7Copy current page's URL", function() {
-        var url = window.location.href;
-        if (url.indexOf(chrome.runtime.getURL("/pages/pdf_viewer.html")) === 0) {
-            const filePos = window.location.search.indexOf("=") + 1;
-            url = window.location.search.substr(filePos);
-        }
-        clipboard.write(url);
-    });
+    mapkey('yy', "#7Copy current page's URL", copyCurrentTabUrl);
     mapkey('yY', "#7Copy all tabs's url", function() {
         RUNTIME('getTabs', null, function (response) {
             clipboard.write(response.tabs.map(tab => tab.url).join('\n'));
