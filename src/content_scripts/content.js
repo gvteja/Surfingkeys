@@ -99,12 +99,6 @@ function applyRuntimeConf(normal) {
     });
 }
 
-const userConfPromise = new Promise(function (resolve, reject) {
-    document.addEventListener("surfingkeys:settingsFromSnippetsLoaded", () => {
-        resolve(runtime.conf);
-    }, {once: true});
-});
-
 function applySettings(api, normal, rs) {
     for (var k in rs) {
         if (runtime.conf.hasOwnProperty(k)) {
@@ -236,12 +230,96 @@ function start(browser) {
             }
         }).then((modes) => {
             _initContent(modes);
+            const titleManager = (function() {
+                var tabIndex = 0,
+                    titleOverride = null,
+                    originalTitle = document.title,
+                    applyingTitle = false,
+                    titleObserver;
+
+                function getTitleNode() {
+                    var titleNode = document.querySelector("title");
+                    if (!titleNode && document.head) {
+                        titleNode = document.createElement("title");
+                        document.head.appendChild(titleNode);
+                    }
+                    return titleNode;
+                }
+
+                function formatTitle(title) {
+                    return tabIndex > 0 ? tabIndex + runtime.conf.tabIndicesSeparator + title : title;
+                }
+
+                function applyTitle() {
+                    if (titleOverride === null && tabIndex <= 0) {
+                        return;
+                    }
+                    var title = formatTitle(titleOverride !== null ? titleOverride : originalTitle);
+                    if (document.title === title) {
+                        applyingTitle = false;
+                        return;
+                    }
+                    applyingTitle = true;
+                    document.title = title;
+                }
+
+                function observeTitle() {
+                    if (titleObserver) {
+                        return;
+                    }
+                    var titleNode = getTitleNode();
+                    if (!titleNode) {
+                        document.addEventListener("DOMContentLoaded", observeTitle, {once: true});
+                        return;
+                    }
+                    titleObserver = new MutationObserver(function() {
+                        if (applyingTitle) {
+                            applyingTitle = false;
+                            if (titleOverride !== null) {
+                                applyTitle();
+                            }
+                        } else if (titleOverride !== null) {
+                            applyTitle();
+                        } else {
+                            originalTitle = document.title;
+                            applyTitle();
+                        }
+                    });
+                    titleObserver.observe(titleNode, { childList: true });
+                }
+
+                return {
+                    apply: applyTitle,
+                    init: function(resp) {
+                        tabIndex = resp.index || 0;
+                        if (resp.titleOverride !== undefined && resp.titleOverride !== null) {
+                            titleOverride = resp.titleOverride.toString();
+                        }
+                        if (titleOverride !== null || tabIndex > 0) {
+                            observeTitle();
+                            applyTitle();
+                        }
+                    },
+                    rename: function(title) {
+                        titleOverride = title == null ? "" : title.toString();
+                        observeTitle();
+                        applyTitle();
+                    },
+                    updateIndex: function(index) {
+                        if (index !== tabIndex) {
+                            tabIndex = index;
+                            applyTitle();
+                        }
+                    }
+                };
+            })();
             runtime.on('titleChanged', function() {
                 Mode.checkEventListener(() => {
                     modes.front.detach();
                     modes = _initModules();
                     _initContent(modes);
                     modes.front.attach();
+                    titleManager.apply();
                 });
             });
             runtime.on('tabActivated', function() {
@@ -272,6 +350,9 @@ function start(browser) {
                     modes.api.renameDocumentTitle(data);
                 }, 'input', false, {startInsert: true});
             });
+            document.addEventListener("surfingkeys:documentTitleRenamed", function(evt) {
+                titleManager.rename(evt.detail.title);
+            });
             document.addEventListener("surfingkeys:ensureFrontEnd", function(evt) {
                 modes.front.attach();
             });
@@ -281,36 +362,10 @@ function start(browser) {
                 url: window.location.href
             }, function (resp) {
 
-                if (resp.index > 0) {
-                    var showTabIndexInTitle = function () {
-                        skipObserver = true;
-                        userConfPromise.then(function(conf) {
-                            document.title = myTabIndex + conf.tabIndicesSeparator + originalTitle;
-                        });
-                    };
-
-                    var myTabIndex = resp.index,
-                        skipObserver = false,
-                        originalTitle = document.title;
-
-                    new MutationObserver(function (mutationsList) {
-                        if (skipObserver) {
-                            skipObserver = false;
-                        } else {
-                            originalTitle = document.title;
-                            showTabIndexInTitle();
-                        }
-                    }).observe(document.querySelector("title"), { childList: true });;
-
-                    showTabIndexInTitle();
-
-                    runtime.on('tabIndexChange', function(msg, sender, response) {
-                        if (msg.index !== myTabIndex) {
-                            myTabIndex = msg.index;
-                            showTabIndexInTitle();
-                        }
-                    });
-                }
+                titleManager.init(resp);
+                runtime.on('tabIndexChange', function(msg, sender, response) {
+                    titleManager.updateIndex(msg.index);
+                });
             });
 
         });
