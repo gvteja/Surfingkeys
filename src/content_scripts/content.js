@@ -28,6 +28,7 @@ import KeyboardUtils from './common/keyboardUtils';
 let surfingkeysContentReady = false;
 let surfingkeysSnippetsExpected = false;
 let surfingkeysSnippetsLoaded = false;
+let surfingkeysFocusOnLoadHandled = false;
 runtime.bookMessage('surfingkeysContentPing', function(msg, sender, response) {
     response && response({
         alive: true,
@@ -97,6 +98,9 @@ function applyRuntimeConf(normal) {
                 _browser.usePdfViewer();
             } else {
                 normal.enable();
+                if (!Mode.getCurrent() || Mode.getCurrent().name !== "PassThrough") {
+                    normal.enter();
+                }
             }
             Mode.showStatus();
         }
@@ -114,7 +118,34 @@ function applyRuntimeConf(normal) {
             }
             dispatchSKEvent("front", ['showStatus', [undefined, undefined, undefined, proxyMode]]);
         }
+        maybeStealFocusOnLoad(state);
     });
+}
+
+function maybeStealFocusOnLoad(state) {
+    if (surfingkeysFocusOnLoadHandled || state !== "enabled"
+        || surfingkeysSnippetsExpected && !surfingkeysSnippetsLoaded
+        || Mode.getCurrent() && Mode.getCurrent().name === "PassThrough") {
+        return;
+    }
+    surfingkeysFocusOnLoadHandled = true;
+    if (runtime.conf.stealFocusOnLoad && !isInUIFrame()
+        && document.body && document.body.childElementCount > 1) {
+        var elm = getRealEdit();
+        elm && elm.blur();
+    }
+}
+
+function applyRuntimeConfAfterSnippets(normal) {
+    let applied = false;
+    const applyOnce = () => {
+        if (!applied) {
+            applied = true;
+            applyRuntimeConf(normal);
+        }
+    };
+    document.addEventListener("surfingkeys:settingsFromSnippetsLoaded", applyOnce, {once: true});
+    document.addEventListener("surfingkeys:userScriptLoaded", applyOnce, {once: true});
 }
 
 function applySettings(api, normal, rs) {
@@ -145,10 +176,15 @@ function applySettings(api, normal, rs) {
         applyUserSettings({settings, error});
     }
 
-    applyRuntimeConf(normal);
-    document.addEventListener("surfingkeys:settingsFromSnippetsLoaded", () => {
+    const waitForSnippets = rs.isMV3 && rs.showAdvanced && rs.snippets && !surfingkeysSnippetsLoaded;
+    if (waitForSnippets) {
+        applyRuntimeConfAfterSnippets(normal);
+    } else {
         applyRuntimeConf(normal);
-    }, {once: true});
+        document.addEventListener("surfingkeys:settingsFromSnippetsLoaded", () => {
+            applyRuntimeConf(normal);
+        }, {once: true});
+    }
 }
 
 function ensureSettingsSnippetsLoaded() {
@@ -165,7 +201,6 @@ function _initModules() {
     const clipboard = createClipboard();
     const insert = createInsert();
     const normal = createNormal(insert);
-    normal.enter();
     startScrollNodeObserver(normal);
     const hints = createHints(insert, normal, clipboard);
     const visual = createVisual(clipboard, hints);
@@ -207,11 +242,6 @@ function _initContent(modes) {
         applySettings(modes.api, modes.normal, rs);
     });
 
-    if (runtime.conf.stealFocusOnLoad && !isInUIFrame()
-        && document.body && document.body.childElementCount > 1) {
-        var elm = getRealEdit();
-        elm && elm.blur();
-    }
 }
 
 window.getFrameId = function () {
