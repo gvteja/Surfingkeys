@@ -25,6 +25,24 @@ import createDefaultMappings from './common/default.js';
 
 import KeyboardUtils from './common/keyboardUtils';
 
+let surfingkeysContentReady = false;
+let surfingkeysSnippetsExpected = false;
+let surfingkeysSnippetsLoaded = false;
+runtime.bookMessage('surfingkeysContentPing', function(msg, sender, response) {
+    response && response({
+        alive: true,
+        ready: surfingkeysContentReady,
+        snippetsExpected: surfingkeysSnippetsExpected,
+        snippetsLoaded: surfingkeysSnippetsLoaded
+    });
+});
+document.addEventListener("surfingkeys:userScriptLoaded", () => {
+    surfingkeysSnippetsLoaded = true;
+});
+document.addEventListener("surfingkeys:settingsFromSnippetsLoaded", () => {
+    surfingkeysSnippetsLoaded = true;
+});
+
 /*
  * Apply custom key mappings for basic users, the input is like
  * {"a": "b", "b": "a", "c": "d"}
@@ -133,6 +151,16 @@ function applySettings(api, normal, rs) {
     }, {once: true});
 }
 
+function ensureSettingsSnippetsLoaded() {
+    if (window === top && surfingkeysSnippetsExpected && !surfingkeysSnippetsLoaded) {
+        setTimeout(() => {
+            if (surfingkeysSnippetsExpected && !surfingkeysSnippetsLoaded) {
+                RUNTIME('ensureSettingsSnippets');
+            }
+        }, 500);
+    }
+}
+
 function _initModules() {
     const clipboard = createClipboard();
     const insert = createInsert();
@@ -152,11 +180,17 @@ function _initModules() {
     dispatchSKEvent('defaultSettingsLoaded', {normal, api});
     RUNTIME('getSettings', null, function(response) {
         var rs = response.settings;
+        surfingkeysSnippetsExpected = !!(rs.isMV3 && rs.showAdvanced && rs.snippets);
+        if (!surfingkeysSnippetsExpected) {
+            surfingkeysSnippetsLoaded = true;
+        }
         applySettings(api, normal, rs);
         const disabledSearchAliases = rs.disabledSearchAliases;
         const getUsage = front.getUsage;
         const frontCommand = front.command;
         dispatchSKEvent('userSettingsLoaded', {settings: rs, disabledSearchAliases, getUsage, frontCommand});
+        surfingkeysContentReady = true;
+        ensureSettingsSnippetsLoaded();
     });
     return {
         normal,

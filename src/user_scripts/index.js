@@ -10,6 +10,7 @@ import {
     isElementPartiallyInViewport,
     showBanner,
     showPopup,
+    setExtensionRootUrl,
     tabOpenLink,
 } from '../content_scripts/common/utils.js';
 
@@ -289,6 +290,7 @@ const api = {
 
 export default (extensionRootUrl, uf) => {
     EXTENSION_ROOT_URL = extensionRootUrl;
+    setExtensionRootUrl(extensionRootUrl);
     if (isInUIFrame()) return;
     userScriptTask = () => {
         var settings = {}, error = "";
@@ -298,6 +300,7 @@ export default (extensionRootUrl, uf) => {
             error = e.toString();
         }
         applyUserSettings({settings, error});
+        dispatchSKEvent("userScriptLoaded");
     };
     if (window === top) {
         userScriptTask();

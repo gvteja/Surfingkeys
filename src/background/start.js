@@ -212,8 +212,11 @@ function start(browser) {
         tabMessages = {},
         tabTitleOverrides = {},
         tabURLs = {},
+        tabContentRepairAttempts = {},
         tabDwellTimers = {},
         tabDwellStart = {};
+
+    const settingsSnippetsUserScriptId = "settingsSnippets";
 
     var newTabUrl = browser._setNewTabUrl();
 
@@ -301,6 +304,7 @@ function start(browser) {
         delete tabMessages[tabId];
         delete tabTitleOverrides[tabId];
         delete tabURLs[tabId];
+        delete tabContentRepairAttempts[tabId];
         tabHistory = tabHistory.filter(function(e) {
             return e !== tabId;
         });
@@ -325,13 +329,199 @@ function start(browser) {
             delete tabMessages[tabId];
         }
     }
-    function setTabAutoDiscardable(tabId, autoDiscardable) {
-        try {
-            chrome.tabs.update(tabId, { autoDiscardable }, () => {});
-        } catch (e) {
-            // Ignore invalid properties in non-Chromium browsers.
+    function ignoreRuntimeError() {
+        // Reading lastError prevents Chrome from logging expected failures on restricted pages.
+        return chrome.runtime.lastError;
+    }
+    function ignorePromiseError(promise) {
+        if (promise && typeof promise.catch === "function") {
+            promise.catch(() => {});
         }
     }
+    function runAfterPromise(promise, fn) {
+        if (promise && typeof promise.then === "function") {
+            ignorePromiseError(promise.then(fn));
+        } else {
+            fn();
+        }
+    }
+    function buildSettingsSnippetsCode(snippets) {
+        const extensionRootUrl = JSON.stringify(chrome.runtime.getURL("/"));
+        return `import('./api.js').then((module) => {module.default(${extensionRootUrl}, (api, settings) => {${snippets}\n})});`;
+    }
+    function isInjectableTab(tab) {
+        if (!tab || tab.id === undefined || tab.discarded || (tab.status && tab.status !== "complete")) {
+            return false;
+        }
+        var url = tab.url || tab.pendingUrl || "";
+        return !url || /^(https?:|file:|ftp:)/.test(url) || /^(about:blank|about:srcdoc)$/.test(url);
+    }
+    function runWhenSurfingkeysContentReady(tabId, fn, attempts) {
+        attempts = attempts === undefined ? 20 : attempts;
+        if (attempts <= 0) {
+            return;
+        }
+        try {
+            chrome.tabs.sendMessage(tabId, {
+                subject: "surfingkeysContentPing"
+            }, {
+                frameId: 0
+            }, function(response) {
+                if (!chrome.runtime.lastError && response && response.ready) {
+                    fn();
+                } else {
+                    setTimeout(function() {
+                        runWhenSurfingkeysContentReady(tabId, fn, attempts - 1);
+                    }, 100);
+                }
+            });
+        } catch (e) {
+            // Ignore invalid tab ids.
+        }
+    }
+    function executeSettingsSnippets(tabId, snippets) {
+        if (!snippets || !isMV3 || !isUserScriptsAvailable() || !chrome.userScripts.execute) {
+            return;
+        }
+        runWhenSurfingkeysContentReady(tabId, function() {
+            const execute = () => ignorePromiseError(chrome.userScripts.execute({
+                target: {
+                    tabId: tabId,
+                    allFrames: true
+                },
+                injectImmediately: true,
+                js: [{
+                    code: buildSettingsSnippetsCode(snippets)
+                }]
+            }));
+            if (chrome.userScripts.configureWorld) {
+                runAfterPromise(chrome.userScripts.configureWorld({
+                    csp: 'script-src \'self\' \'unsafe-eval\'',
+                    messaging: true
+                }), execute);
+            } else {
+                execute();
+            }
+        });
+    }
+    function reloadTabForContentRepair(tabId) {
+        if (tabContentRepairAttempts[tabId]) {
+            return;
+        }
+        tabContentRepairAttempts[tabId] = 1;
+        try {
+            chrome.tabs.reload(tabId, {}, ignoreRuntimeError);
+        } catch (e) {
+            // Ignore invalid tab ids.
+        }
+    }
+    function injectSurfingkeysContent(tabId, snippets) {
+        try {
+            if (isMV3 && chrome.scripting && chrome.scripting.executeScript) {
+                var target = {
+                    tabId: tabId,
+                    allFrames: true
+                };
+                if (chrome.scripting.insertCSS) {
+                    ignorePromiseError(chrome.scripting.insertCSS({
+                        target: target,
+                        files: ["content.css"]
+                    }));
+                }
+                runAfterPromise(chrome.scripting.executeScript({
+                    target: target,
+                    files: ["content.js"]
+                }), function() {
+                    executeSettingsSnippets(tabId, snippets);
+                });
+            } else if (chrome.tabs.executeScript) {
+                if (chrome.tabs.insertCSS) {
+                    chrome.tabs.insertCSS(tabId, {
+                        file: "content.css",
+                        allFrames: true
+                    }, ignoreRuntimeError);
+                }
+                chrome.tabs.executeScript(tabId, {
+                    file: "content.js",
+                    allFrames: true
+                }, function() {
+                    ignoreRuntimeError();
+                    executeSettingsSnippets(tabId, snippets);
+                });
+            }
+        } catch (e) {
+            // Ignore restricted pages and unsupported browser APIs.
+        }
+    }
+    function repairSurfingkeysContent(tab) {
+        if (isMV3 && isUserScriptsAvailable()) {
+            loadSettings(['showAdvanced', 'snippets'], function(data) {
+                const snippets = data.showAdvanced && data.snippets ? data.snippets : "";
+                if (snippets && !chrome.userScripts.execute) {
+                    reloadTabForContentRepair(tab.id);
+                } else {
+                    injectSurfingkeysContent(tab.id, snippets);
+                }
+            });
+        } else {
+            injectSurfingkeysContent(tab.id);
+        }
+    }
+    function repairSurfingkeysSnippets(tab) {
+        if (!isMV3 || !isUserScriptsAvailable()) {
+            return;
+        }
+        loadSettings(['showAdvanced', 'snippets'], function(data) {
+            const snippets = data.showAdvanced && data.snippets ? data.snippets : "";
+            if (!snippets) {
+                return;
+            }
+            if (chrome.userScripts.execute) {
+                executeSettingsSnippets(tab.id, snippets);
+            } else {
+                reloadTabForContentRepair(tab.id);
+            }
+        });
+    }
+    function ensureSurfingkeysContent(tab) {
+        if (!isInjectableTab(tab)) {
+            return;
+        }
+        try {
+            chrome.tabs.sendMessage(tab.id, {
+                subject: "surfingkeysContentPing"
+            }, {
+                frameId: 0
+            }, function(response) {
+                if (chrome.runtime.lastError || !response || !response.alive) {
+                    repairSurfingkeysContent(tab);
+                } else if (response.ready && response.snippetsExpected && !response.snippetsLoaded) {
+                    repairSurfingkeysSnippets(tab);
+                }
+            });
+        } catch (e) {
+            repairSurfingkeysContent(tab);
+        }
+    }
+    function ensureSurfingkeysContentByTabId(tabId) {
+        if (!chrome.tabs.get) {
+            return;
+        }
+        try {
+            chrome.tabs.get(tabId, function(tab) {
+                if (!chrome.runtime.lastError) {
+                    ensureSurfingkeysContent(tab);
+                }
+            });
+        } catch (e) {
+            // Ignore invalid tab ids.
+        }
+    }
+    self.ensureSettingsSnippets = function(message, sender, sendResponse) {
+        if (sender.tab) {
+            repairSurfingkeysSnippets(sender.tab);
+        }
+    };
 
     function sendTabMessage(tabId, frameId, message) {
         const opts = (frameId === -1) ? undefined : {frameId: frameId};
@@ -393,6 +583,7 @@ function start(browser) {
         if (changeInfo.status === "complete") {
             if (tab.active) {
                 _tabActivated(tabId);
+                ensureSurfingkeysContent(tab);
             }
         }
         if (browser.detectTabTitleChange && changeInfo.title) {
@@ -414,6 +605,7 @@ function start(browser) {
                 clearTabDwell(_lastActiveTabId);
             }
             _tabActivated(tab.id);
+            ensureSurfingkeysContent(tab);
             scheduleTabDwell(tab.id);
         }, w);
     });
@@ -439,6 +631,7 @@ function start(browser) {
             clearTabDwell(_lastActiveTabId);
         }
         _tabActivated(activeInfo.tabId);
+        ensureSurfingkeysContentByTabId(activeInfo.tabId);
         scheduleTabDwell(activeInfo.tabId);
         historyTabAction = false;
         chromelikeNewTabPosition = 0;
@@ -1403,31 +1596,30 @@ function start(browser) {
         }
 
         if (data.isUserScriptsAvailable) {
-            const userScriptId = "settingsSnippets";
             if (data.showAdvanced && data.snippets) {
                 const snippets = data.snippets;
-                chrome.userScripts.getScripts({ids:[userScriptId]}, (r) => {
-                    const code = `import('./api.js').then((module) => {module.default("${chrome.runtime.getURL("/")}", (api, settings) => {${snippets}\n})});`;
+                chrome.userScripts.getScripts({ids:[settingsSnippetsUserScriptId]}, (r) => {
+                    const code = buildSettingsSnippetsCode(snippets);
                     const registerSettingSnippets = () => {
                         chrome.userScripts.register([{
                             allFrames: true,
-                            id: userScriptId,
+                            id: settingsSnippetsUserScriptId,
                             matches: ['*://*/*', 'file:///*'],
                             js: [{code}]
                         }]);
                     };
                     if (r.length > 0) {
                         if (r[0].js[0].code !== code) {
-                            chrome.userScripts.unregister({ids:[userScriptId]}, registerSettingSnippets);
+                            chrome.userScripts.unregister({ids:[settingsSnippetsUserScriptId]}, registerSettingSnippets);
                         }
                     } else {
                         registerSettingSnippets();
                     }
                 });
             } else {
-                chrome.userScripts.getScripts({ids:[userScriptId]}, (r) => {
+                chrome.userScripts.getScripts({ids:[settingsSnippetsUserScriptId]}, (r) => {
                     if (r.length > 0) {
-                        chrome.userScripts.unregister({ids:[userScriptId]});
+                        chrome.userScripts.unregister({ids:[settingsSnippetsUserScriptId]});
                     }
                 });
             }
@@ -1743,7 +1935,7 @@ function start(browser) {
     self.tabURLAccessed = function(message, sender, sendResponse) {
         if (sender.tab) {
             var tabId = sender.tab.id;
-            setTabAutoDiscardable(tabId, false);
+            delete tabContentRepairAttempts[tabId];
             _setScrollPos_bg(tabId);
             if (!tabURLs.hasOwnProperty(tabId)) {
                 tabURLs[tabId] = {};

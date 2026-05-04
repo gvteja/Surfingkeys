@@ -104,6 +104,12 @@ const colors = [
     '#708090', // Slate Gray
     '#6B8E23'  // Olive Drab
 ];
+let extensionRootUrl = "";
+
+function setExtensionRootUrl(rootUrl) {
+    extensionRootUrl = rootUrl;
+}
+
 function getColor(i) {
     return colors[i];
 }
@@ -191,7 +197,11 @@ function getBrowserName() {
 }
 
 function isInUIFrame() {
-    return window !== top && document.location.href.indexOf(chrome.runtime.getURL("/")) === 0;
+    var rootUrl = extensionRootUrl;
+    if (!rootUrl && typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.getURL) {
+        rootUrl = chrome.runtime.getURL("/");
+    }
+    return window !== top && rootUrl && document.location.href.indexOf(rootUrl) === 0;
 }
 
 function timeStampString(t) {
@@ -1169,6 +1179,7 @@ export {
     safeDecodeURIComponent,
     scrollIntoViewIfNeeded,
     setSanitizedContent,
+    setExtensionRootUrl,
     showBanner,
     showPopup,
     tabOpenLink,
