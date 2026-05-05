@@ -1042,9 +1042,16 @@ function start(browser) {
         }
     };
     self.duplicateTab = function(message, sender, sendResponse) {
-        chrome.tabs.duplicate(sender.tab.id, function() {
+        const tabId = sender.tab && sender.tab.id;
+        if (tabId === undefined) {
+            return;
+        }
+        chrome.tabs.duplicate(tabId, function() {
+            if (chrome.runtime.lastError) {
+                return;
+            }
             if (message.active === false) {
-                chrome.tabs.update(sender.tab.id, { active: true });
+                chrome.tabs.update(tabId, { active: true });
             }
         });
     };

@@ -85,7 +85,8 @@ function applyRuntimeConf(normal) {
                 _browser.usePdfViewer();
             } else {
                 normal.enable();
-                if (!Mode.getCurrent() || Mode.getCurrent().name !== "PassThrough") {
+                const currentMode = Mode.getCurrent();
+                if (!currentMode || currentMode.name === "Lurk") {
                     normal.enter();
                 }
             }
