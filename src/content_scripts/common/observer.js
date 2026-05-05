@@ -5,12 +5,24 @@ import {
 
 import Mode from './mode';
 
-function isElementPositionRelative(elm) {
-    while (elm !== document.body) {
+function getParentElementAcrossShadowRoot(elm) {
+    if (elm.parentElement) {
+        return elm.parentElement;
+    }
+    const rootNode = elm.getRootNode && elm.getRootNode();
+    return rootNode && rootNode.host && rootNode.host.nodeType === Node.ELEMENT_NODE ? rootNode.host : null;
+}
+
+export function isElementPositionRelative(elm) {
+    while (elm && elm !== document.body) {
+        if (elm.nodeType !== Node.ELEMENT_NODE) {
+            elm = getParentElementAcrossShadowRoot(elm);
+            continue;
+        }
         if (getComputedStyle(elm).position === "relative") {
             return true;
         }
-        elm = elm.parentElement;
+        elm = getParentElementAcrossShadowRoot(elm);
     }
     return false;
 }
