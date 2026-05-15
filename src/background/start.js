@@ -212,9 +212,7 @@ function start(browser) {
         tabMessages = {},
         tabTitleOverrides = {},
         tabURLs = {},
-        tabContentRepairAttempts = {},
-        tabDwellTimers = {},
-        tabDwellStart = {};
+        tabContentRepairAttempts = {};
 
     const settingsSnippetsUserScriptId = "settingsSnippets";
 
@@ -223,7 +221,6 @@ function start(browser) {
     var conf = {
         llm: { },
         focusAfterClosed: "right",
-        tabDwellTime: 0,
         tabsMRUOrder: true,
         newTabPosition: 'default',
         showTabIndices: false,
@@ -299,7 +296,6 @@ function start(browser) {
     loadSettings(null, browser._applyProxySettings);
 
     function removeTab(tabId) {
-        clearTabDwell(tabId);
         delete tabActivated[tabId];
         delete tabMessages[tabId];
         delete tabTitleOverrides[tabId];
@@ -532,40 +528,6 @@ function start(browser) {
         }
     }
     var _lastActiveTabId = null;
-    function clearTabDwell(tabId) {
-        if (tabDwellTimers.hasOwnProperty(tabId)) {
-            clearTimeout(tabDwellTimers[tabId]);
-            delete tabDwellTimers[tabId];
-        }
-        delete tabDwellStart[tabId];
-    }
-    function getTabDwellTimeValue() {
-        return parseInt(conf.tabDwellTime, 10);
-    }
-    function isDwellTimeEnabled() {
-        var dwellTime = getTabDwellTimeValue();
-        return isFinite(dwellTime) && dwellTime > 0;
-    }
-    function scheduleTabDwell(tabId) {
-        clearTabDwell(tabId);
-        var dwellTime = getTabDwellTimeValue();
-        if (!isFinite(dwellTime) || dwellTime <= 0) {
-            tabActivated[tabId] = new Date().getTime();
-            return;
-        }
-        var start = new Date().getTime();
-        tabDwellStart[tabId] = start;
-        tabDwellTimers[tabId] = setTimeout(function() {
-            if (tabDwellStart[tabId] !== start) {
-                return;
-            }
-            if (_lastActiveTabId !== tabId) {
-                return;
-            }
-            tabActivated[tabId] = start;
-            clearTabDwell(tabId);
-        }, dwellTime);
-    }
     function _tabActivated(tabId) {
         if (_lastActiveTabId !== tabId) {
             if (_lastActiveTabId !== null) {
@@ -594,20 +556,10 @@ function start(browser) {
         }
     });
     chrome.windows.onFocusChanged.addListener(function(w) {
-        if (w === chrome.windows.WINDOW_ID_NONE) {
-            if (_lastActiveTabId !== null) {
-                clearTabDwell(_lastActiveTabId);
-            }
-            return;
-        }
         getActiveTab(function(tab) {
-            if (_lastActiveTabId !== null && _lastActiveTabId !== tab.id) {
-                clearTabDwell(_lastActiveTabId);
-            }
             _tabActivated(tab.id);
             ensureSurfingkeysContent(tab);
-            scheduleTabDwell(tab.id);
-        }, w);
+        });
     });
 
     chrome.tabs.onCreated.addListener(function(tab) {
@@ -627,12 +579,9 @@ function start(browser) {
             tabHistory.push(activeInfo.tabId);
             tabHistoryIndex = tabHistory.length - 1;
         }
-        if (_lastActiveTabId !== null && _lastActiveTabId !== activeInfo.tabId) {
-            clearTabDwell(_lastActiveTabId);
-        }
+        tabActivated[activeInfo.tabId] = new Date().getTime();
         _tabActivated(activeInfo.tabId);
         ensureSurfingkeysContentByTabId(activeInfo.tabId);
-        scheduleTabDwell(activeInfo.tabId);
         historyTabAction = false;
         chromelikeNewTabPosition = 0;
 
@@ -645,39 +594,9 @@ function start(browser) {
         _updateTabIndices();
     });
 
-    function getActiveTab(cb, windowId) {
-        const fallback = () => {
-            chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-                tabs.length > 0 && cb(tabs[0]);
-            });
-        };
-        if (windowId !== undefined && windowId !== chrome.windows.WINDOW_ID_NONE) {
-            chrome.tabs.query({ active: true, windowId }, function(tabs) {
-                if (tabs.length > 0) {
-                    cb(tabs[0]);
-                } else {
-                    fallback();
-                }
-            });
-            return;
-        }
-        chrome.windows.getLastFocused({ populate: true }, function(win) {
-            if (chrome.runtime.lastError || !win) {
-                fallback();
-                return;
-            }
-            const activeTab = win.tabs && win.tabs.find((t) => t.active);
-            if (activeTab) {
-                cb(activeTab);
-                return;
-            }
-            chrome.tabs.query({ active: true, windowId: win.id }, function(tabs) {
-                if (tabs.length > 0) {
-                    cb(tabs[0]);
-                } else {
-                    fallback();
-                }
-            });
+    function getActiveTab(cb) {
+        chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+            tabs.length > 0 && cb(tabs[0]);
         });
     }
     function restartExtensionAndTabs() {
@@ -700,13 +619,6 @@ function start(browser) {
                     chrome.tabs.query({ windowId: tab.windowId }, function(tabs) {
                         index = ((index % tabs.length) + tabs.length) % tabs.length;
                         chrome.tabs.update(tabs[index].id, { active: true });
-                    });
-                });
-                break;
-            case 'chooseTab':
-                getActiveTab(function(tab) {
-                    sendTabMessage(tab.id, 0, {
-                        subject: 'chooseTab'
                     });
                 });
                 break;
@@ -1049,95 +961,34 @@ function start(browser) {
             }
         });
     };
-    function _getTabMRUTime(tab, useDwellTime) {
-        if (useDwellTime) {
-            return tabActivated[tab.id];
-        }
-        return tab.lastAccessed || tabActivated[tab.id];
-    }
-    function _sortTabsByMRU(tabs, options) {
-        var currentTabId = options && options.currentTabId;
-        var useDwellTime = options && options.useDwellTime;
-        var removeCurrent = options && options.removeCurrent;
-        if (removeCurrent && currentTabId !== undefined) {
-            tabs = tabs.filter(function(t) {
-                return t.id !== currentTabId;
-            });
-        }
-        tabs.sort(function(x, y) {
-            // Shift tabs without "last access" data to the end
-            var a = _getTabMRUTime(x, useDwellTime);
-            var b = _getTabMRUTime(y, useDwellTime);
-
-            if (!isFinite(a) && !isFinite(b)) {
-                return 0;
-            }
-
-            if (!isFinite(a)) {
-                return 1;
-            }
-
-            if (!isFinite(b)) {
-                return -1;
-            }
-
-            return b - a;
-        });
-        return tabs;
-    }
-    function activateLastHistoryTab() {
-        if (tabHistory.length > 1) {
-            var lastTab = tabHistory[tabHistory.length - 2];
-            chrome.tabs.update(lastTab, {
-                active: true
-            });
-            return true;
-        }
-        return false;
-    }
-    function activateMostRecentTab(currentTabId, useDwellTime) {
-        if (!useDwellTime) {
-            return activateLastHistoryTab();
-        }
-        chrome.tabs.query({}, function(tabs) {
-            tabs = _sortTabsByMRU(tabs, {
-                currentTabId,
-                useDwellTime: true,
-                removeCurrent: true
-            });
-            if (tabs.length > 0 && isFinite(_getTabMRUTime(tabs[0], true))) {
-                chrome.tabs.update(tabs[0].id, {
-                    active: true
-                });
-                return;
-            }
-            activateLastHistoryTab();
-        });
-        return true;
-    }
-    // Core implementation for going to last tab - used by both message handler and CLI
-    function _goToLastTab(currentTabId) {
-        var useDwellTime = isDwellTimeEnabled();
-        if (currentTabId !== undefined) {
-            activateMostRecentTab(currentTabId, useDwellTime);
-        } else {
-            getActiveTab(function(tab) {
-                activateMostRecentTab(tab ? tab.id : undefined, useDwellTime);
-            });
-        }
-    }
     self.getTabs = function(message, sender, sendResponse) {
         var tab = sender.tab;
         var queryInfo = message.queryInfo || {};
         chrome.tabs.query(queryInfo, function(tabs) {
             tabs = _filterByTitleOrUrl(tabs, message.filter);
             if (tabs.length > message.tabsThreshold && conf.tabsMRUOrder) {
-                var useDwellTime = isDwellTimeEnabled();
                 // only remove current tab when tabsMRUOrder is enabled.
-                tabs = _sortTabsByMRU(tabs, {
-                    currentTabId: tab.id,
-                    useDwellTime,
-                    removeCurrent: true
+                tabs = tabs.filter(function(b) {
+                    return b.id !== tab.id;
+                });
+                tabs.sort(function(x, y) {
+                    // Shift tabs without "last access" data to the end
+                    var a = x.lastAccessed || tabActivated[x.id];
+                    var b = y.lastAccessed || tabActivated[y.id];
+
+                    if (!isFinite(a) && !isFinite(b)) {
+                        return 0;
+                    }
+
+                    if (!isFinite(a)) {
+                        return 1;
+                    }
+
+                    if (!isFinite(b)) {
+                        return -1;
+                    }
+
+                    return b - a;
                 });
             }
             _response(message, sendResponse, {
@@ -1233,7 +1084,12 @@ function start(browser) {
         });
     };
     self.goToLastTab = function(message, sender, sendResponse) {
-        _goToLastTab(sender.tab && sender.tab.id);
+        if (tabHistory.length > 1) {
+            var lastTab = tabHistory[tabHistory.length - 2];
+            chrome.tabs.update(lastTab, {
+                active: true
+            });
+        }
     };
     self.historyTab = function(message, sender, sendResponse) {
         if (tabHistory.length > 0) {
@@ -2329,12 +2185,6 @@ function start(browser) {
             });
         }
     };
-
-    // Register CLI handlers - see chrome.js for why this bridge pattern is needed
-    if (browser.cliHandlers) {
-        browser.cliHandlers.goToLastTab = _goToLastTab;
-        browser.cliHandlers.restartExtensionAndTabs = restartExtensionAndTabs;
-    }
 }
 
 export {

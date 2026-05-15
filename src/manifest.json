@@ -22,9 +22,6 @@
         "closeTab": {
             "description": "Close the current tab."
         },
-        "chooseTab": {
-            "description": "Choose a tab."
-        },
         "copyCurrentTabUrl": {
             "description": "Copy the current tab URL.",
             "suggested_key": {

@@ -402,10 +402,6 @@ function start(browser) {
             runtime.on('showBanner', function(msg, sender, response) {
                 showBanner(msg.message, 3000);
             });
-            runtime.on('chooseTab', function() {
-                modes.front.attach();
-                modes.front.chooseTab();
-            });
             runtime.on('copyCurrentTabUrl', function() {
                 modes.api.copyCurrentTabUrl();
             });

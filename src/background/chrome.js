@@ -176,86 +176,12 @@ function startNative() {
 }
 nvimServer.instance = startNative();
 
-// CLI native messaging server
-//
-// Commands like "chooseTab" send a message to the content script, which handles the UI.
-// Commands like "lastTab" need to call functions in start.js that have access to internal
-// tab management state (tabHistory, tabActivated, dwell time config).
-//
-// We cannot use chrome.runtime.sendMessage here because messages sent from the service
-// worker do NOT trigger chrome.runtime.onMessage listeners in the same service worker.
-// This is by design - sendMessage is for cross-context communication (background ↔ content
-// scripts), not self-messaging. Attempting it results in "The message port closed before
-// a response was received" error.
-//
-// Instead, we use cliHandlers as a bridge: this object is passed to start(), which
-// populates it with functions that have access to its internal scope.
-const cliHandlers = {};
-
-function getLastFocusedActiveTab(cb) {
-    const fallback = () => {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            if (tabs[0]) {
-                cb(tabs[0]);
-            }
-        });
-    };
-    chrome.windows.getLastFocused({ populate: true }, (win) => {
-        if (chrome.runtime.lastError || !win) {
-            fallback();
-            return;
-        }
-        const activeTab = win.tabs && win.tabs.find((t) => t.active);
-        if (activeTab) {
-            cb(activeTab);
-            return;
-        }
-        chrome.tabs.query({ active: true, windowId: win.id }, (tabs) => {
-            if (tabs[0]) {
-                cb(tabs[0]);
-            } else {
-                fallback();
-            }
-        });
-    });
-}
-
-function startCliServer() {
-    const cliHost = chrome.runtime.connectNative("com.vijayt.surfingkeys");
-    cliHost.onMessage.addListener((msg) => {
-        if (msg.command === "chooseTab") {
-            getLastFocusedActiveTab((tab) => {
-                chrome.tabs.sendMessage(tab.id, {subject: 'chooseTab'});
-            });
-        } else if (msg.command === "lastTab") {
-            if (cliHandlers.goToLastTab) {
-                cliHandlers.goToLastTab();
-            } else {
-                console.warn("[CLI] goToLastTab handler not registered");
-            }
-        } else if (msg.command === "restartExt" || msg.command === "restart" || msg.command === "restartext") {
-            if (cliHandlers.restartExtensionAndTabs) {
-                cliHandlers.restartExtensionAndTabs();
-            } else {
-                console.warn("[CLI] restartExtensionAndTabs handler not registered");
-            }
-        } else {
-            console.warn("[CLI] Unrecognized command:", msg);
-        }
-    });
-    cliHost.onDisconnect.addListener(() => {
-        setTimeout(startCliServer, 5000);
-    });
-}
-startCliServer();
-
 start({
     name: "Chrome",
     detectTabTitleChange: true,
     getLatestHistoryItem,
     loadRawSettings,
     nvimServer,
-    cliHandlers,
     _applyProxySettings,
     _setNewTabUrl,
     _getContainerName
