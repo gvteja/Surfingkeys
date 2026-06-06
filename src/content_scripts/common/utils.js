@@ -1059,6 +1059,13 @@ function safeDecodeURIComponent(url) {
     }
 }
 
+function getCopyableUrl(url) {
+    if (typeof url === "string" && url.indexOf(chrome.runtime.getURL("/pages/pdf_viewer.html")) === 0) {
+        return new URL(url).searchParams.get("file") || url;
+    }
+    return url;
+}
+
 function getCssSelectorsOfEditable() {
     return "input:not([type=submit]), textarea, *[contenteditable=true], *[role=textbox], select, div.ace_cursor";
 }
@@ -1155,6 +1162,7 @@ export {
     getLargeElements,
     getRealEdit,
     getRealRect,
+    getCopyableUrl,
     getTextNodePos,
     getTextNodes,
     getTextRect,

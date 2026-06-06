@@ -14,8 +14,14 @@ import {
 } from '../content_scripts/common/utils.js';
 
 var EXTENSION_ROOT_URL = "";
+function isSurfingkeysPdfViewer() {
+    return EXTENSION_ROOT_URL && document.location.href.indexOf(`${EXTENSION_ROOT_URL}pages/pdf_viewer.html`) === 0;
+}
+
 function isInUIFrame() {
-    return !document.location.href.startsWith("chrome://") && document.location.href.indexOf(EXTENSION_ROOT_URL) === 0;
+    return !document.location.href.startsWith("chrome://")
+        && document.location.href.indexOf(EXTENSION_ROOT_URL) === 0
+        && !isSurfingkeysPdfViewer();
 }
 
     function _isDomainApplicable(domain) {

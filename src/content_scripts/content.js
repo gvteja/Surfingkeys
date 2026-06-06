@@ -31,6 +31,10 @@ document.addEventListener("surfingkeys:settingsFromSnippetsLoaded", () => {
     surfingkeysSettingsFromSnippetsLoaded = true;
 });
 
+function isSurfingkeysPdfViewer() {
+    return document.location.href.startsWith(chrome.runtime.getURL("/pages/pdf_viewer.html"));
+}
+
 /*
  * Apply custom key mappings for basic users, the input is like
  * {"a": "b", "b": "a", "c": "d"}
@@ -162,7 +166,9 @@ function applySettings(api, normal, rs) {
         applyUserSettings({settings, error});
     }
 
-    const waitForSnippets = rs.isMV3 && rs.showAdvanced && rs.snippets && !surfingkeysSettingsFromSnippetsLoaded;
+    const waitForSnippets = rs.isMV3 && rs.showAdvanced && rs.snippets
+        && !surfingkeysSettingsFromSnippetsLoaded
+        && !isSurfingkeysPdfViewer();
     if (waitForSnippets) {
         applyRuntimeConfAfterSnippets(normal);
     } else {
