@@ -249,7 +249,100 @@ function createFront(insert, normal, hints, visual, browser) {
         }
     }
 
-    var onEditorSaved, elementBehindEditor;
+    var onEditorSaved, elementBehindEditor, localInputEditor;
+
+    function showLocalInputEditor(content, onSave) {
+        if (localInputEditor) {
+            localInputEditor(false);
+        }
+
+        const host = document.createElement("div");
+        host.setAttribute("data-surfingkeys-local-editor", "");
+        host.style.cssText = "position: fixed !important; inset: 0 !important; z-index: 2147483647 !important; pointer-events: none !important;";
+        const shadow = host.attachShadow({mode: "open"});
+        const style = document.createElement("style");
+        style.textContent = `
+            .sk-local-editor {
+                box-sizing: border-box;
+                position: absolute;
+                top: 18vh;
+                left: 10vw;
+                width: 80vw;
+                padding: 12px;
+                border: 1px solid #999;
+                border-radius: 4px;
+                background: #f7f7f7;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
+                pointer-events: auto;
+            }
+            input {
+                box-sizing: border-box;
+                width: 100%;
+                height: 36px;
+                padding: 6px 10px;
+                border: 1px solid #777;
+                border-radius: 3px;
+                outline: none;
+                background: white;
+                color: #111;
+                font: 16px/24px system-ui, sans-serif;
+            }
+            input:focus {
+                border-color: #1e88e5;
+                box-shadow: 0 0 0 1px #1e88e5;
+            }
+        `;
+        const editor = document.createElement("div");
+        editor.className = "sk-local-editor";
+        editor.setAttribute("role", "dialog");
+        editor.setAttribute("aria-label", "Surfingkeys input editor");
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = content || "";
+        editor.appendChild(input);
+        shadow.append(style, editor);
+        document.documentElement.appendChild(host);
+
+        let closed = false;
+        function close(save) {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            const value = input.value;
+            input.blur();
+            if (insert && typeof insert.exit === "function") {
+                insert.exit();
+            }
+            host.remove();
+            localInputEditor = undefined;
+            if (save) {
+                onSave(value);
+            }
+        }
+        localInputEditor = close;
+
+        input.addEventListener("keydown", function(event) {
+            if (event.key === "Enter" && !event.isComposing) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                close(true);
+            } else if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                close(false);
+            }
+        }, true);
+        input.addEventListener("blur", function() {
+            close(false);
+        }, {once: true});
+
+        if (insert && typeof insert.enter === "function") {
+            insert.enter(input);
+        }
+        input.focus();
+        input.select();
+    }
 
     /**
      * Launch the vim editor.
@@ -308,6 +401,12 @@ function createFront(insert, normal, hints, visual, browser) {
         };
         if (options) {
             Object.assign(cmd, options);
+        }
+        if (window === top && cmd.type === "input" && !useNeovim && !runtime.conf.useNeovim) {
+            const localOnSave = onEditorSaved;
+            onEditorSaved = undefined;
+            showLocalInputEditor(content, localOnSave);
+            return;
         }
         if (useNeovim || runtime.conf.useNeovim) {
             cmd.file_name = `${new URL(window.location.origin).host}/${elementBehindEditor.nodeName.toLowerCase()}`;
