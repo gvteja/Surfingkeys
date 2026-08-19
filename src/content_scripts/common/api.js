@@ -22,6 +22,34 @@ import {
     tabOpenLink,
 } from './utils.js';
 
+function getGmailThreadUrl(location, root) {
+    if (location.hostname !== "mail.google.com") {
+        return null;
+    }
+
+    var threadHeaders = Array.from(root.querySelectorAll("h2[data-legacy-thread-id]"));
+    var visibleThreadHeaders = threadHeaders.filter(function(header) {
+        return header.getClientRects().length > 0;
+    });
+    var threadHeader = visibleThreadHeaders.length === 1 ? visibleThreadHeaders[0] :
+        (threadHeaders.length === 1 ? threadHeaders[0] : null);
+    var threadId = threadHeader && threadHeader.getAttribute("data-legacy-thread-id");
+
+    if (!threadId) {
+        return null;
+    }
+
+    var accountMatch = location.pathname.match(/^\/mail\/u\/([^/]+)/);
+    var account = accountMatch ? accountMatch[1] : "0";
+    var gmailUrl = new URL(`${location.origin}/mail/u/${encodeURIComponent(account)}/`);
+    gmailUrl.searchParams.set("source", "sync");
+    gmailUrl.searchParams.set("tf", "1");
+    gmailUrl.searchParams.set("view", "pt");
+    gmailUrl.searchParams.set("th", threadId);
+    gmailUrl.searchParams.set("search", "all");
+    return gmailUrl.href;
+}
+
 function createAPI(clipboard, insert, normal, hints, visual, front, browser) {
 
     function createKeyTarget(code, ag, repeatIgnore) {
@@ -437,7 +465,10 @@ function createAPI(clipboard, insert, normal, hints, visual, front, browser) {
      * copyCurrentTabUrl();
      */
     function copyCurrentTabUrl() {
-        clipboard.write(getCopyableUrl(window.location.href));
+        var url = getCopyableUrl(window.location.href);
+        url = getGmailThreadUrl(window.location, document) || url;
+
+        clipboard.write(url);
     }
 
     initSKFunctionListener("api", {
@@ -559,4 +590,5 @@ function createAPI(clipboard, insert, normal, hints, visual, front, browser) {
     };
 }
 
+export { getGmailThreadUrl };
 export default createAPI;
